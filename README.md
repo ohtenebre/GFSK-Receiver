@@ -38,11 +38,13 @@ The program reads an IQ WAV file and produces a binary file with recovered bytes
 ## Project Structure
 
 ```
-.
 ├── includes
 │   ├── GFSKDemodulator.hpp
 │   ├── dsp.hpp
 │   ├── file_mng.hpp
+│   └── mmse_fir_interpolator.hpp
+│
+├── third_party
 │   └── mmse_interp_taps.hpp
 │
 ├── src
@@ -54,4 +56,21 @@ The program reads an IQ WAV file and produces a binary file with recovered bytes
 └── CMakeLists.txt
 ```
 
-> Parameters are configured in `main.cpp`.
+## Third-party code
+
+The `third_party` directory contains external code used by the project.
+
+`mmse_interp_taps.hpp` contains MMSE FIR interpolator coefficient tables
+ported from GNU Radio:
+
+* Source: GNU Radio `gr-filter/include/gnuradio/filter/interpolator_taps.h`
+* Copyright: Free Software Foundation, Inc.
+* License: GPL-3.0-or-later
+
+The coefficient table is used by the custom MMSE FIR interpolator to match
+GNU Radio's interpolation behavior.
+
+## Configuration
+
+Parameters such as sample rate, frequency shift, and demodulation settings
+are configured in `main.cpp`.

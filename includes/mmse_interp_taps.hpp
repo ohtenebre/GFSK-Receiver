@@ -1,9 +1,16 @@
 #pragma once
-// MMSE FIR interpolator coefficient table.
-// Ported verbatim from GNU Radio (gr-filter/include/gnuradio/filter/interpolator_taps.h),
-// Copyright 2002,2007,2012 Free Software Foundation, Inc., SPDX-License-Identifier: GPL-3.0-or-later.
-// Machine-generated 8-tap / 128-phase MMSE interpolator taps, ported here so the
-// custom resampler/timing-recovery code numerically matches GNU Radio's blocks.
+/*
+ * This file contains MMSE FIR interpolator coefficient tables.
+ *
+ * Original source:
+ * GNU Radio - gr-filter/include/gnuradio/filter/interpolator_taps.h
+ *
+ * Copyright (C) 2002, 2007, 2012 Free Software Foundation, Inc.
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ *
+ * This file was copied and adapted for use in <your project name>.
+*/
 namespace dsp_detail
 {
     static constexpr int NTAPS = 8;

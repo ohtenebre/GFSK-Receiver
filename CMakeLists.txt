@@ -17,6 +17,7 @@ add_executable(${PROJECT_NAME} ${PROJECT_SOURCES})
 target_include_directories(${PROJECT_NAME} PRIVATE
     src/
     includes/
+    third_party/
 )
 
 find_library(FFTW3F_LIBRARY NAMES fftw3f fftw3f-3)

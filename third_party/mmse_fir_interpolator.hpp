@@ -4,6 +4,11 @@
 #include <algorithm>
 #include <stdexcept>
 
+/*
+ * Uses coefficient table from GNU Radio.
+ * See third_party/gnuradio/mmse_interp_taps.hpp
+*/
+
 namespace dsp_detail
 {
     template <typename sample_t>

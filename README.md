@@ -38,6 +38,9 @@ The program reads an IQ WAV file and produces a binary file with recovered bytes
 ## Project Structure
 
 ```
+├── python
+│   └── parse_image.py
+│
 ├── includes
 │   ├── GFSKDemodulator.hpp
 │   ├── dsp.hpp

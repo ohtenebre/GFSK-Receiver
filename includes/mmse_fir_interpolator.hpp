@@ -7,7 +7,7 @@
 /*
  * Uses coefficient table from GNU Radio.
  * See third_party/gnuradio/mmse_interp_taps.hpp
-*/
+ */
 
 namespace dsp_detail
 {

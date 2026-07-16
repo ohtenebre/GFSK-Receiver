@@ -6,7 +6,7 @@
 - Frequency shifting
 - Fractional resampling
 - Quadrature FM demodulation
-- Clock recovery using Mueller and Muller algorithm
+- Clock recovery using TED Gardner
 - Bit extraction and binary output
 
 
@@ -39,7 +39,8 @@ The program reads an IQ WAV file and produces a binary file with recovered bytes
 
 ```
 ├── python
-│   └── parse_image.py
+│   ├── parse_image.py
+│   └── parse_telemetry.py
 │
 ├── includes
 │   ├── GFSKDemodulator.hpp

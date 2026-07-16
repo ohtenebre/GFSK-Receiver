@@ -45,3 +45,17 @@ class FrequencyShifter {
         current_phase = 0.0f;
     }
 };
+
+// Low Pass Filter with blackman window
+class FIRFilter {
+  private:
+    std::vector<float> taps;
+    std::vector<float> delay;
+  public:
+    FIRFilter(std::vector<float> t) : taps(std::move(t)), delay(taps.size(), 0) {}
+
+    std::vector<float> process(const std::vector<float> &input);
+};
+
+// Generate low-pass FIR filter coefficients
+std::vector<float> generate_lowpass(float gain, float sample_rate, float cutoff, float transition);

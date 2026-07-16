@@ -80,13 +80,13 @@ def parse_geoscan_image_packet(payload: bytes):
     print(f"Данные куска (HEX): {image_data.hex()[:30]}...")
 
     # Packet CRC
-    packet_crc = struct.unpack(">H", payload[76:78])[0]
+    packet_crc = struct.unpack("<H", payload[76:78])[0]
     print(f"CRC пакета: {hex(packet_crc)}")
 
     return file_id, offset, image_data
 
 
-FILE = "INPUT_FILE"
+FILE = "../files/INPUT.bin"
 
 SYNC = 0x930B51DE
 PREAMBLE = 0xAAAAAAAA
@@ -112,8 +112,6 @@ images = {}
 # Search sync words
 for i in range(len(bits) - 32):
     if np.array_equal(bits[i : i + 32], sync_bits):
-        count += 1
-
         # Get packet after sync
         start = i + 32
         frame_bits = bits[start : start + (FRAME_LEN + CRC_LEN) * 8]
@@ -123,14 +121,21 @@ for i in range(len(bits) - 32):
         # Remove scrambling
         frame = pn9_descramble(frame)
 
-        # Check CRC
-        crc = frame[72:74]
-
-        calc_crc = crc16(frame[:72])
-        recv_crc = int.from_bytes(crc, "big")
-
         # Build full packet
         full_packet = struct.pack(">I", PREAMBLE) + struct.pack(">I", SYNC) + frame
+
+        # Check CRC
+        crc = full_packet[80:82]
+
+        calc_crc = crc16(full_packet[8:80])
+        recv_crc = int.from_bytes(crc, "big")
+
+        sync_img = struct.unpack(">I", full_packet[13:17])[0]
+
+        if sync_img != 0x316F6B6F:
+            continue
+
+        count += 1
 
         if calc_crc == recv_crc:
             crc_ok += 1
@@ -139,10 +144,10 @@ for i in range(len(bits) - 32):
             file_id = struct.unpack("<H", full_packet[21:23])[0]
 
             # Get payload
-            data = full_packet[23:76]
+            data = full_packet[23:77]
 
-            print(f"offset: {offset}")
-            print(f"id: {file_id}")
+            # print(f"packet[{count}]: {file_id} {offset}")
+            # print(f'[{full_packet.hex()}]')
 
             # Create new image
             if file_id not in images:
@@ -157,15 +162,10 @@ for i in range(len(bits) - 32):
             # Put data to correct place
             img[offset : offset + len(data)] = data
 
-            # parse_geoscan_image_packet(full_packet)
-
-        # if crc_ok == 1:
-        #     break
-
 print(f"Всего найдено синхросло: {count}")
 print(f"Совпавших CRC: {crc_ok}")
 
 # Save images
 for file_id, img in images.items():
-    with open(f"image_{file_id}.bin", "wb") as f:
+    with open(f"image_{file_id}.jpg", "wb") as f:
         f.write(img)

@@ -26,3 +26,6 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     pthread
     ${FFTW3F_LIBRARY}
 )
+
+target_compile_options(${PROJECT_NAME} PRIVATE -O3 -ffast-math -march=native -flto)
+target_link_options(${PROJECT_NAME} PRIVATE -flto)

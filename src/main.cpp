@@ -8,21 +8,33 @@ const char *IN_FILENAME = "input.bin";
 const char *OUT_IQ_FILENAME = "output_iq.bin";
 const char *OUT_BYTES_FILENAME = "output_bytes.bin";
 
-const float SAMPLE_RATE = 150000.f;
+const float SAMPLE_RATE = 2e6;
 const float SAMPLE_RATE_AFTER_RESAMPLER = 38400.f;
 
-const int NSPS = 4;
-const float G_MU = 0.175f;
-const float OMEGA_REL_LIMIT = 0.005f;
+const float Q_GAIN = 1.27323954;
 
-const float FREQ_OFFSET = 0.f;
+const float FIR_GAIN = 0.0025f;
+const float CUTOFF = 10000.f;
+const float TRANSITION = 4000.f;
+
+const float NSPS = 4.f;
+const float LOOP_BW = 0.019f;
+const float TED_GAIN = 1.5f;
+const float MAX_DEV = 1.5f;
+const float DAMPING = 0.9f;
+
+const float FREQ_OFFSET = 103.e3f;
 
 int main()
 {
     // Initialize DSP blocks
     FrequencyShifter freqshifter;
     FractionalResampler resampler(SAMPLE_RATE / SAMPLE_RATE_AFTER_RESAMPLER);
-    GFSKDemodulator demodulator(NSPS, G_MU, OMEGA_REL_LIMIT);
+    QuadratureDemod demod(Q_GAIN);
+    auto taps = generate_lowpass(FIR_GAIN, SAMPLE_RATE_AFTER_RESAMPLER, CUTOFF, TRANSITION);
+    FIRFilter lpf(taps);
+    SymbolSync symsync(NSPS, LOOP_BW, DAMPING, TED_GAIN, MAX_DEV);
+    BinarySlicer slicer;
 
     // Read IQ samples from WAV
     auto IQ = readIQ(IN_FILENAME);
@@ -33,10 +45,18 @@ int main()
 
     // Resample to symbol rate
     IQ = resampler.process(IQ);
-    writeIQ(IQ, OUT_IQ_FILENAME);
 
-    // GFSK demodulation
-    auto bits = demodulator.process(IQ);
+    // Quadrature demodulation
+    auto demod_out = demod.process(IQ);
+
+    // FIR
+    auto filtered = lpf.process(demod_out);
+
+    // Zero Crossing Symbol Sync
+    auto symbols = symsync.process(filtered);
+
+    // Binary Slicer
+    auto bits = slicer.process(symbols);
 
     uint8_t bit_buf = 0;
     uint8_t bit_cnt = 0;

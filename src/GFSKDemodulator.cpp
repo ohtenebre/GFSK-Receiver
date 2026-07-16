@@ -1,134 +1,140 @@
 #include "GFSKDemodulator.hpp"
 #include "mmse_fir_interpolator.hpp"
 
-// Initialize GFSK demodulator and clock recovery loop
-GFSKDemodulator::GFSKDemodulator(int samples_per_symbol, float g_mu, float omega_rel_limit) : last_sample(0.f, 0.f), d_samples_per_symbol(static_cast<float>(samples_per_symbol))
+#include <cmath>
+#include <cstddef>
+#include <vector>
+
+// Fast approximation of atan2()
+inline float fast_atan2f(float y, float x)
 {
-    // Quadrature demodulator gain
-    const float sensitivity = M_PIf / d_samples_per_symbol;
-    d_gain = 1.0f / sensitivity;
+    constexpr float PI = 3.14159265f;
+    constexpr float PIBY2 = 1.5707963f;
 
-    // Clock recovery loop parameters
-    const float gain_mu = g_mu;
-    const float gain_omega = 0.25f * gain_mu * gain_mu;
-    const float loop_bw = -std::log((gain_mu + gain_omega) / (-2.0f) + 1.0f);
-    const float damping = 1.0f;
-    const float ted_gain = 1.0f;
+    if (x == 0.0f && y == 0.0f)
+        return 0.0f;
 
-    // Limit timing correction range
-    const float max_deviation = omega_rel_limit * d_samples_per_symbol;
+    float ax = fabsf(x), ay = fabsf(y);
+    float mn = std::min(ax, ay);
+    float mx = std::max(ax, ay);
 
-    d_nom_period = d_samples_per_symbol;
-    d_min_period = d_nom_period - max_deviation;
-    d_max_period = d_nom_period + max_deviation;
+    float a = mn / mx;
+    float s = a * a;
 
-    // Loop filter coefficients
-    const float zeta_omega_n_T = damping * loop_bw;
-    const float k0 = 2.0f / ted_gain;
-    const float k1 = std::exp(-zeta_omega_n_T);
+    // Polynomial approximation
+    float r = ((-0.0464964749f * s + 0.15931422f) * s - 0.327622764f) * s * a + a;
 
-    const float sinh_zeta_omega_n_T = std::sinh(zeta_omega_n_T);
-    const float cosx_omega_d_T = 1.0f;
+    if (ay > ax)
+        r = PIBY2 - r;
+    if (x < 0.0f)
+        r = PI - r;
+    if (y < 0.0f)
+        r = -r;
 
-    d_alpha = k0 * k1 * sinh_zeta_omega_n_T;
-    d_beta = k0 * (1.0f - k1 * (sinh_zeta_omega_n_T + cosx_omega_d_T));
-
-    reset();
+    return r;
 }
 
-// Reset demodulator state
-void GFSKDemodulator::reset()
+// Quadrature demodulator (FM discriminator)
+std::vector<float> QuadratureDemod::process(const std::vector<std::complex<float>> &iq)
 {
-    last_sample = std::complex<float>(0.f, 0.f);
-
-    d_interp_buf.clear();
-
-    mu = 0.0f;
-
-    d_avg_period = d_samples_per_symbol;
-    d_inst_period = d_samples_per_symbol;
-
-    last_rx_symbol = 0.f;
-    last_sliced_symbol = 0.f;
-}
-
-// Convert symbol value to decision level
-static inline float slice(float x)
-{
-    return x < 0.0f ? -1.0f : 1.0f;
-}
-
-// Perform quadrature demodulation and clock recovery
-std::vector<uint8_t> GFSKDemodulator::process(const std::vector<std::complex<float>> &IQ)
-{
-    std::vector<uint8_t> output_bits;
-    if (IQ.empty())
-        return output_bits;
-
-    // Quadrature FM demodulation
-    std::vector<float> fm_demodded;
-    fm_demodded.reserve(IQ.size());
-
-    for (const auto &current : IQ)
+    std::vector<float> output(iq.size(), 0);
+    for (size_t i = 0; i < iq.size(); ++i)
     {
-        std::complex<float> conj_prod = current * std::conj(last_sample);
-        float phase_diff = std::arg(conj_prod);
+        // Save first sample for phase difference calculation
+        if (d_first)
+        {
+            d_last_sample = iq[i];
+            output[i] = 0.f;
+            d_first = false;
 
-        fm_demodded.push_back(phase_diff * d_gain);
+            continue;
+        }
 
-        last_sample = current;
+        // Phase difference between adjacent samples
+        std::complex<float> product = iq[i] * std::conj(d_last_sample);
+
+        // Extract instantaneous frequency
+        float phase = fast_atan2f(product.imag(), product.real());
+
+        // Apply demodulator gain
+        output[i] = phase * d_gain;
+
+        d_last_sample = iq[i];
     }
 
-    d_interp_buf.insert(d_interp_buf.end(), fm_demodded.begin(), fm_demodded.end());
+    return output;
+}
 
-    const size_t ntaps = static_cast<size_t>(dsp_detail::NTAPS);
-    if (d_interp_buf.size() <= ntaps)
-        return output_bits;
+// Symbol timing recovery using Gardner TED
+SymbolSync::SymbolSync(float sps, float loop_bw, float damping, float ted_gain, float max_dev)
+{
+    d_sps = sps;
+    d_omega = sps;
+    d_mu = 0;
+    d_last_sample = 0.f;
 
-    const size_t ni = d_interp_buf.size() - ntaps;
+    float alpha = damping * loop_bw * 2.0f;
+    float beta = loop_bw * loop_bw;
 
-    size_t idx = 0;
+    d_gain_mu = alpha / ted_gain;
 
-    // Mueller and Muller clock recovery
-    while (idx < ni)
+    d_gain_omega = beta / ted_gain;
+
+    d_max_deviation = max_dev;
+}
+
+std::vector<float> SymbolSync::process(const std::vector<float> &input)
+{
+    std::vector<float> output;
+
+    // Current position in input stream
+    float index = 8.f;
+
+    while (index + 8 < input.size())
     {
-        float current_rx_symbol = dsp_detail::mmse_interpolate<float>(&d_interp_buf[idx], mu);
-        uint8_t bit = (current_rx_symbol > 0.0f) ? 1 : 0;
+        int i = static_cast<int>(index);
+        // Interpolate sample at current timing phase
+        float sample = dsp_detail::mmse_interpolate(&input[i], d_mu);
 
-        float current_sliced_symbol = slice(current_rx_symbol);
-        float error = last_sliced_symbol * current_rx_symbol - current_sliced_symbol * last_rx_symbol;
+        // Position half symbol before current sample
+        float mid_index_f = index - d_omega / 2.0f;
 
-        float avg_period = d_avg_period + d_beta * error;
-        if (avg_period > d_max_period)
-            avg_period = d_max_period;
-        else if (avg_period < d_min_period)
-            avg_period = d_min_period;
+        float mid = 0.f;
+        if (mid_index_f >= 0.0f)
+        {
+            int mid_i = (int)mid_index_f;
+            float mid_mu = mid_index_f - mid_i;
+            // Half-symbol interpolated sample
+            mid = dsp_detail::mmse_interpolate(&input[mid_i], mid_mu);
+        }
 
-        float inst_period = avg_period + d_alpha * error;
-        if (inst_period <= 0.0f)
-            inst_period = avg_period;
+        // Output synchronized symbol
+        output.push_back(sample);
 
-        float phase = mu + inst_period;
-        float n = std::floor(phase);
-        float phase_wrapped = phase - n;
-        size_t phase_n = static_cast<size_t>(n);
+        // Gardner timing error detector
+        float error = (sample - d_last_sample) * mid;
 
-        if (idx + phase_n >= ni)
-            break;
+        // Correct samples-per-symbol estimate
+        d_omega += d_gain_omega * error;
 
-        output_bits.push_back(bit);
+        // Limit clock drift
+        if (d_omega > d_sps + d_max_deviation)
+            d_omega = d_sps + d_max_deviation;
+        if (d_omega < d_sps - d_max_deviation)
+            d_omega = d_sps - d_max_deviation;
 
-        mu = phase_wrapped;
-        d_avg_period = avg_period;
-        d_inst_period = inst_period;
-        last_rx_symbol = current_rx_symbol;
-        last_sliced_symbol = current_sliced_symbol;
+        // Update interpolation phase
+        d_mu += d_omega + d_gain_mu * error;
 
-        idx += phase_n;
+        // Move input pointer when full sample consumed
+        while (d_mu >= 1.0f)
+        {
+            d_mu -= 1.0f;
+            index += 1.0f;
+        }
+
+        d_last_sample = sample;
     }
 
-    if (idx > 0 && idx <= d_interp_buf.size())
-        d_interp_buf.erase(d_interp_buf.begin(), d_interp_buf.begin() + idx);
-
-    return output_bits;
+    return output;
 }

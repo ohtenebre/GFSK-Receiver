@@ -19,3 +19,6 @@ std::vector<uint8_t> packBits(const std::vector<uint8_t> &bits, uint8_t &bit_buf
 
 // Write bytes to binary file
 void writeBytesToBinary(const std::vector<uint8_t> &bytes, const std::string &filename);
+
+// Write float stream to binary file
+void writeFloatsToBinary(const std::vector<float> &samples, const std::string &filename);

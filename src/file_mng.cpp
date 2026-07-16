@@ -48,7 +48,6 @@ uint32_t getSampleRate(const std::string &filename)
     return sample_rate;
 }
 
-
 // Write complex IQ samples to binary file
 void writeIQ(const std::vector<std::complex<float>> &IQ, const std::string &filename)
 {
@@ -84,7 +83,7 @@ std::vector<uint8_t> packBits(const std::vector<uint8_t> &bits, uint8_t &bit_buf
     return packed_bytes;
 }
 
-// Write byte stream to binary file
+// Write bytes to binary file
 void writeBytesToBinary(const std::vector<uint8_t> &bytes, const std::string &filename)
 {
     if (bytes.empty())
@@ -96,4 +95,21 @@ void writeBytesToBinary(const std::vector<uint8_t> &bytes, const std::string &fi
         throw std::runtime_error("Не удалось открыть файл для записи байт: " + filename);
 
     out.write(reinterpret_cast<const char *>(bytes.data()), bytes.size());
+}
+
+// Write float stream to binary file
+void writeFloatsToBinary(const std::vector<float> &samples, const std::string &filename)
+{
+    if (samples.empty())
+        return;
+
+    std::ofstream out(filename, std::ios::binary);
+
+    if (!out)
+        throw std::runtime_error("Не удалось открыть файл для записи float: " + filename);
+
+    out.write(
+        reinterpret_cast<const char *>(samples.data()),
+        samples.size() * sizeof(float)
+    );
 }
